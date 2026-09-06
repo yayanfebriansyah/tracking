@@ -1,4 +1,6 @@
 streamlit
 easyocr
 Pillow
-torch --extra-index-url https://download.pytorch.org/whl/cpu
+--find-links https://download.pytorch.org/whl/cpu/torch_stable.html
+torchvision
+torch
