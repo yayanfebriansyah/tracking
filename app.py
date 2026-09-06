@@ -15,21 +15,41 @@ def process_image_for_accounts(image, target_accounts):
 
 st.set_page_config(page_title="AI Scanner Rekening", page_icon="📱", layout="centered")
 st.title("📱 AI Mobile Scanner")
-st.warning("🔒 Aman: Data rekening Anda tidak disimpan di server. Data akan hilang setelah web ini ditutup.")
+st.warning("🔒 Aman: Data rekening Anda tidak disimpan di server. Data akan hilang begitu web ditutup.")
 
-# --- FITUR BARU: COPY-PASTE DATA DARI HP ---
-st.subheader("1. Masukkan Data Rekening")
-data_input = st.text_area("Paste/Tempel daftar nomor rekening yang dicari di sini (pisahkan dengan Enter):", height=100)
+# --- INISIALISASI PENYIMPANAN SEMENTARA (SESSION STATE) ---
+if "target_accounts" not in st.session_state:
+    st.session_state.target_accounts = []
 
-# Mengolah data teks dari input menjadi daftar (list)
-target_accounts = [line.strip() for line in data_input.split('\n') if line.strip()]
+# --- FORM INPUT DENGAN TOMBOL SUBMIT ---
+st.subheader("1. Masukkan Data Rekening Target")
 
-if not target_accounts:
-    st.info("Silakan paste nomor rekening di kotak atas terlebih dahulu sebelum memindai dokumen.")
+with st.form("form_rekening"):
+    data_input = st.text_area(
+        "Paste/Tempel daftar nomor rekening di sini (pisahkan dengan Enter):", 
+        height=120,
+        placeholder="Contoh:\n1234567890\n0987654321\n1122334455"
+    )
+    # Tombol Submit khusus untuk input teks
+    submit_button = st.form_submit_button("💾 Simpan Data Rekening", type="primary", use_container_width=True)
+
+# Logika saat tombol Submit ditekan
+if submit_button:
+    # Memproses teks input menjadi list
+    accounts = [line.strip() for line in data_input.split('\n') if line.strip()]
+    st.session_state.target_accounts = accounts
+    if accounts:
+        st.toast(f"Berhasil menyimpan {len(accounts)} nomor rekening!", icon="✅")
+
+# Status data rekening saat ini
+if not st.session_state.target_accounts:
+    st.info("📌 Silakan paste nomor rekening di atas, lalu pencet tombol **'Simpan Data Rekening'**.")
 else:
-    st.success(f"Berhasil memuat {len(target_accounts)} nomor rekening sementara.")
+    st.success(f"✅ Data Aktif: **{len(st.session_state.target_accounts)}** nomor rekening tersimpan dan siap dicari.")
     
     st.divider()
+    
+    # --- BAGIAN PINDAI DOKUMEN ---
     st.subheader("2. Mulai Pindai Dokumen")
     
     tab1, tab2 = st.tabs(["📸 Ambil Foto", "📂 Pilih dari Galeri"])
@@ -41,19 +61,21 @@ else:
             image_to_process = Image.open(camera_photo)
 
     with tab2:
-        uploaded_file = st.file_uploader("Pilih gambar", type=["jpg", "png", "jpeg"])
+        uploaded_file = st.file_uploader("Pilih gambar dari galeri", type=["jpg", "png", "jpeg"])
         if uploaded_file is not None:
             image_to_process = Image.open(uploaded_file)
             st.image(image_to_process, caption="Preview Dokumen", use_container_width=True)
 
+    # Tombol untuk memproses foto
     if image_to_process is not None:
         if st.button("🔍 Pindai Dokumen Sekarang", type="primary", use_container_width=True):
             with st.spinner("AI sedang membaca angka pada kertas..."):
-                found, raw_text = process_image_for_accounts(image_to_process, target_accounts)
+                found, raw_text = process_image_for_accounts(image_to_process, st.session_state.target_accounts)
                 
             st.divider()
             if found:
                 st.success("✅ **DOKUMEN DITEMUKAN! SIMPAN KERTAS INI.**")
+                st.write("Nomor rekening yang cocok:")
                 for acc in found:
                     st.write(f"- **{acc}**")
             else:
