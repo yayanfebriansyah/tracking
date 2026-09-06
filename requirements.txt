@@ -1,6 +1,7 @@
 streamlit
 easyocr
 Pillow
+opencv-python-headless
 --find-links https://download.pytorch.org/whl/cpu/torch_stable.html
 torchvision
 torch
