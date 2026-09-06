@@ -4,45 +4,42 @@ import numpy as np
 from PIL import Image
 import re
 
-# Menggunakan cache agar mesin AI EasyOCR hanya di-load 1x ke memori server
-@st.cache_resource
-def load_ocr_reader():
-    # Memuat model OCR bahasa Inggris (fokus pada angka dan huruf latin)
+# --- FITUR KUNCI: CACHING MODEL ---
+# @st.cache_resource memberitahu Streamlit untuk menyimpan model AI di RAM server.
+# Model TIDAK AKAN di-load/download ulang setiap kali tombol dipencet atau web dibuka.
+@st.cache_resource(show_spinner="Memuat model AI ke memori server (hanya 1x)...")
+def get_ocr_reader():
+    # Menyimpan model ke memori server agar siap pakai kapan saja
     return easyocr.Reader(['en'], gpu=False)
 
 def process_handwritten_accounts(image, target_accounts):
-    reader = load_ocr_reader()
+    # Mengambil model yang SUDAH SIAP dari RAM (Super Cepat!)
+    reader = get_ocr_reader()
     
-    # Konversi gambar dari PIL ke Numpy Array
     image_np = np.array(image)
     
-    # Membaca teks/angka dari gambar menggunakan Deep Learning
+    # Membaca teks/angka dari gambar
     results = reader.readtext(image_np, detail=0)
     
-    # Gabungkan seluruh hasil bacaan menjadi satu string
     extracted_text = " ".join(results)
-    
-    # Hapus semua karakter selain angka (0-9)
     cleaned_digits_only = re.sub(r'\D', '', extracted_text)
     
     found_accounts = []
     for account in target_accounts:
-        # Bersihkan nomor rekening target agar hanya berupa angka murni
         clean_target = re.sub(r'\D', '', str(account))
-        
-        # Cek apakah angka target ada di dalam deretan angka yang dibaca AI
         if clean_target and clean_target in cleaned_digits_only:
             found_accounts.append(account)
             
     return found_accounts, extracted_text
 
-# --- TAMPILAN APLIKASI STREAMLIT ---
-st.set_page_config(page_title="AI Scanner Tulisan Tangan", page_icon="📝", layout="centered")
-st.title("📝 AI Scanner (Angka Tulisan Tangan & Cetak)")
-st.caption("Menggunakan AI Deep Learning (EasyOCR) untuk membaca angka.")
-st.warning("🔒 Data Anda aman: Tidak disimpan di server dan akan hilang otomatis begitu web ditutup.")
+# --- TAMPILAN STREAMLIT ---
+st.set_page_config(page_title="AI Scanner Instant", page_icon="⚡", layout="centered")
+st.title("⚡ AI Scanner Super Cepat")
+st.caption("Model AI tersimpan di server RAM untuk respons instan.")
 
-# Inisialisasi memori simpan sementara
+# Panggil fungsi ini di awal agar model AI langsung siap di memori
+reader_status = get_ocr_reader()
+
 if "target_accounts" not in st.session_state:
     st.session_state.target_accounts = []
 
@@ -62,7 +59,6 @@ if submit_button:
     if accounts:
         st.toast(f"Berhasil menyimpan {len(accounts)} nomor rekening!", icon="✅")
 
-# Status ketersediaan data
 if not st.session_state.target_accounts:
     st.info("📌 Silakan paste nomor rekening di atas, lalu pencet tombol **'Simpan Data Rekening'**.")
 else:
@@ -86,8 +82,8 @@ else:
             st.image(image_to_process, caption="Preview Dokumen", use_container_width=True)
 
     if image_to_process is not None:
-        if st.button("🔍 Pindai Tulisan Tangan / Cetak", type="primary", use_container_width=True):
-            with st.spinner("AI sedang menganalisis bentuk angka tulisan tangan... (Mohon tunggu beberapa detik)"):
+        if st.button("🔍 Pindai Sekarang", type="primary", use_container_width=True):
+            with st.spinner("AI sedang membaca angka..."):
                 found, raw_text = process_handwritten_accounts(image_to_process, st.session_state.target_accounts)
                 
             st.divider()
@@ -99,5 +95,5 @@ else:
             else:
                 st.error("❌ **TIDAK COCOK. KERTAS BISA DISINGKIRKAN.**")
                 
-            with st.expander("Lihat teks/angka yang berhasil dibaca AI"):
-                st.text(raw_text if raw_text else "Tidak ada teks/angka yang terdeteksi.")
+            with st.expander("Lihat teks/angka yang terbaca"):
+                st.text(raw_text if raw_text else "Tidak ada teks/angka terdeteksi.")
