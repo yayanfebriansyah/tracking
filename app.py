@@ -1,56 +1,75 @@
 import streamlit as st
-import pytesseract
+import easyocr
+import numpy as np
 from PIL import Image
+import re
 
-def process_image_for_accounts(image, target_accounts):
-    extracted_text = pytesseract.image_to_string(image)
-    cleaned_text = extracted_text.replace(" ", "").replace("-", "")
+# Menggunakan cache agar mesin AI EasyOCR hanya di-load 1x ke memori server
+@st.cache_resource
+def load_ocr_reader():
+    # Memuat model OCR bahasa Inggris (fokus pada angka dan huruf latin)
+    return easyocr.Reader(['en'], gpu=False)
+
+def process_handwritten_accounts(image, target_accounts):
+    reader = load_ocr_reader()
+    
+    # Konversi gambar dari PIL ke Numpy Array
+    image_np = np.array(image)
+    
+    # Membaca teks/angka dari gambar menggunakan Deep Learning
+    results = reader.readtext(image_np, detail=0)
+    
+    # Gabungkan seluruh hasil bacaan menjadi satu string
+    extracted_text = " ".join(results)
+    
+    # Hapus semua karakter selain angka (0-9)
+    cleaned_digits_only = re.sub(r'\D', '', extracted_text)
     
     found_accounts = []
     for account in target_accounts:
-        if account in cleaned_text or account in extracted_text:
+        # Bersihkan nomor rekening target agar hanya berupa angka murni
+        clean_target = re.sub(r'\D', '', str(account))
+        
+        # Cek apakah angka target ada di dalam deretan angka yang dibaca AI
+        if clean_target and clean_target in cleaned_digits_only:
             found_accounts.append(account)
             
     return found_accounts, extracted_text
 
-st.set_page_config(page_title="AI Scanner Rekening", page_icon="📱", layout="centered")
-st.title("📱 AI Mobile Scanner")
-st.warning("🔒 Aman: Data rekening Anda tidak disimpan di server. Data akan hilang begitu web ditutup.")
+# --- TAMPILAN APLIKASI STREAMLIT ---
+st.set_page_config(page_title="AI Scanner Tulisan Tangan", page_icon="📝", layout="centered")
+st.title("📝 AI Scanner (Angka Tulisan Tangan & Cetak)")
+st.caption("Menggunakan AI Deep Learning (EasyOCR) untuk membaca angka.")
+st.warning("🔒 Data Anda aman: Tidak disimpan di server dan akan hilang otomatis begitu web ditutup.")
 
-# --- INISIALISASI PENYIMPANAN SEMENTARA (SESSION STATE) ---
+# Inisialisasi memori simpan sementara
 if "target_accounts" not in st.session_state:
     st.session_state.target_accounts = []
 
-# --- FORM INPUT DENGAN TOMBOL SUBMIT ---
 st.subheader("1. Masukkan Data Rekening Target")
 
 with st.form("form_rekening"):
     data_input = st.text_area(
         "Paste/Tempel daftar nomor rekening di sini (pisahkan dengan Enter):", 
         height=120,
-        placeholder="Contoh:\n1234567890\n0987654321\n1122334455"
+        placeholder="Contoh:\n1234567890\n0987654321"
     )
-    # Tombol Submit khusus untuk input teks
     submit_button = st.form_submit_button("💾 Simpan Data Rekening", type="primary", use_container_width=True)
 
-# Logika saat tombol Submit ditekan
 if submit_button:
-    # Memproses teks input menjadi list
     accounts = [line.strip() for line in data_input.split('\n') if line.strip()]
     st.session_state.target_accounts = accounts
     if accounts:
         st.toast(f"Berhasil menyimpan {len(accounts)} nomor rekening!", icon="✅")
 
-# Status data rekening saat ini
+# Status ketersediaan data
 if not st.session_state.target_accounts:
     st.info("📌 Silakan paste nomor rekening di atas, lalu pencet tombol **'Simpan Data Rekening'**.")
 else:
-    st.success(f"✅ Data Aktif: **{len(st.session_state.target_accounts)}** nomor rekening tersimpan dan siap dicari.")
+    st.success(f"✅ Data Aktif: **{len(st.session_state.target_accounts)}** nomor rekening tersimpan.")
     
     st.divider()
-    
-    # --- BAGIAN PINDAI DOKUMEN ---
-    st.subheader("2. Mulai Pindai Dokumen")
+    st.subheader("2. Pindai Kertas Dokumen")
     
     tab1, tab2 = st.tabs(["📸 Ambil Foto", "📂 Pilih dari Galeri"])
     image_to_process = None
@@ -66,11 +85,10 @@ else:
             image_to_process = Image.open(uploaded_file)
             st.image(image_to_process, caption="Preview Dokumen", use_container_width=True)
 
-    # Tombol untuk memproses foto
     if image_to_process is not None:
-        if st.button("🔍 Pindai Dokumen Sekarang", type="primary", use_container_width=True):
-            with st.spinner("AI sedang membaca angka pada kertas..."):
-                found, raw_text = process_image_for_accounts(image_to_process, st.session_state.target_accounts)
+        if st.button("🔍 Pindai Tulisan Tangan / Cetak", type="primary", use_container_width=True):
+            with st.spinner("AI sedang menganalisis bentuk angka tulisan tangan... (Mohon tunggu beberapa detik)"):
+                found, raw_text = process_handwritten_accounts(image_to_process, st.session_state.target_accounts)
                 
             st.divider()
             if found:
@@ -81,5 +99,5 @@ else:
             else:
                 st.error("❌ **TIDAK COCOK. KERTAS BISA DISINGKIRKAN.**")
                 
-            with st.expander("Lihat teks yang berhasil dibaca AI"):
-                st.text(raw_text)
+            with st.expander("Lihat teks/angka yang berhasil dibaca AI"):
+                st.text(raw_text if raw_text else "Tidak ada teks/angka yang terdeteksi.")
